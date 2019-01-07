@@ -266,7 +266,6 @@ void setColorForWord(uint8_t *_word, int len)
   double h = hue % 360 / 360.0; // modulo is expensive
   double r, g, b;
   HSVtoRGB(r, g, b, h, 1.0, ledBrightness * 0.01);
-  Serial.println(len);
   for (int i = 0; i < len; i++)
   {  
     if (_word[i] < LED_PIXELS)
@@ -710,8 +709,8 @@ void setup()
   
   // RTC
   rtc.begin();
-  //rtc.setDOW(WEDNESDAY);     // Set Day-of-Week to SUNDAY
-  //rtc.setTime(12, 0, 0);     // Set the time to 12:00:00 (24hr format)
+  //rtc.setDOW(MONDAY);     // Set Day-of-Week to SUNDAY
+  //rtc.setTime(20, 36, 0);     // Set the time to 12:00:00 (24hr format)
   //rtc.setDate(7, 1, 2019);   // Set the date to January 1st, 2014
   Serial.println("RTC started ...");
 
@@ -725,9 +724,6 @@ void setup()
   Serial.println("IR started ...");
 
   randomSeed(analogRead(0));
-
-  size_t len = sizeof(HALF_M)/sizeof(HALF_M[0]);
-  Serial.println(len);
   
   delay(500);
 }
