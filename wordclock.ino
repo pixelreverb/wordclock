@@ -92,44 +92,73 @@ struct digit
 };
 typedef struct digit Digit;
 
+// MACROS
+#define WORD(s,a) { s, a, sizeof(a)/sizeof(a[0]) }
 
 // VARIABLES
 // ... Board ...
 uint8_t interruptDeltaT = 2;// seconds at which timer1 should interrupt
 
 // ... Words ...
-const Word IT = {"IT", new uint8_t[2]{0, 1}, 2};
-const Word IS = {"IS", new uint8_t[2]{3, 4}, 2};
+const uint8_t A_IT[] = {0, 1};
+const Word IT = WORD("IT", A_IT);
 
+const uint8_t A_IS[] = {3, 4};
+const Word IS = WORD("IS", A_IS);
+
+const uint8_t  A_M5[] = {29, 30, 31, 32};
+const uint8_t A_M10[] = {21, 20, 19};
+const uint8_t A_M15[] = {17, 16, 15, 14, 13, 12, 11};
+const uint8_t A_M20[] = {23, 24, 25, 26, 27, 28};
+const uint8_t A_M25[] = {23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
+const uint8_t A_M30[] = {6, 7, 8, 9};
 const Word W_MINS[] = {
-  {"M5",  new uint8_t[4]{29, 30, 31, 32}, 4},
-  {"M10", new uint8_t[3]{21, 20, 19}, 3},
-  {"M15", new uint8_t[7]{17, 16, 15, 14, 13, 12, 11}, 7},
-  {"M20", new uint8_t[6]{23, 24, 25, 26, 27, 28}, 6},
-  {"M25", new uint8_t[10]{23, 24, 25, 26, 27, 28, 29, 30, 31, 32}, 10}, // only for simplicity
-  {"M30", new uint8_t[4]{6, 7, 8, 9}, 4}
+  WORD("M5" , A_M5),
+  WORD("M10", A_M10),
+  WORD("M15", A_M15),
+  WORD("M20", A_M20),
+  WORD("M25", A_M25), // only for simplicity
+  WORD("M30", A_M30)
 };
 
-const Word TO   = {"TO",   new uint8_t[2]{43, 42}, 2};
-const Word PAST = {"PAST", new uint8_t[4]{41, 40, 39, 38}, 4};
+const uint8_t A_TO[] = {43, 42};
+const Word TO = WORD("TO", A_TO);
 
+const uint8_t A_PAST[] = {41, 40, 39, 38};
+const Word PAST = WORD("PAST", A_PAST);
+
+const uint8_t A_H12[] = {60, 59, 58, 57, 56, 55};
+const uint8_t A_H1[] = {73, 74, 75};
+const uint8_t A_H2[] = {48, 49, 50};
+const uint8_t A_H3[] = {65, 64, 63, 62, 61};
+const uint8_t A_H4[] = {36, 35, 34, 33};
+const uint8_t A_H5[] = {44, 45, 46, 47};
+const uint8_t A_H6[] = {92, 93, 94};
+const uint8_t A_H7[] = {87, 86, 85, 84, 83};
+const uint8_t A_H8[] = {81, 80, 79, 78, 77};
+const uint8_t A_H9[] = {51, 52, 53, 54};
+const uint8_t A_H10[] = {89, 90, 91};
+const uint8_t A_H11[] = {67, 68, 69, 70, 71, 72};
 const Word W_HOURS[] = {
-  {"H12", new uint8_t[6]{60, 59, 58, 57, 56, 55}, 6},
-  {"H1",  new uint8_t[3]{73, 74, 75}, 3},
-  {"H2",  new uint8_t[3]{48, 49, 50}, 3},
-  {"H3",  new uint8_t[5]{65, 64, 63, 62, 61}, 5},
-  {"H4",  new uint8_t[4]{36, 35, 34, 33}, 4},
-  {"H5",  new uint8_t[4]{44, 45, 46, 47}, 4},
-  {"H6",  new uint8_t[3]{92, 93, 94}, 3},
-  {"H7",  new uint8_t[5]{87, 86, 85, 84, 83}, 5},
-  {"H8",  new uint8_t[5]{81, 80, 79, 78, 77}, 5},
-  {"H9",  new uint8_t[4]{51, 52, 53, 54}, 4},
-  {"H10", new uint8_t[3]{89, 90, 91}, 3},
-  {"H11", new uint8_t[6]{67, 68, 69, 70, 71, 72}, 6}
+  WORD("H12", A_H12),
+  WORD("H1",  A_H1),
+  WORD("H2",  A_H2),
+  WORD("H3",  A_H3),
+  WORD("H4",  A_H4),
+  WORD("H5",  A_H5),
+  WORD("H6",  A_H6),
+  WORD("H7",  A_H7),
+  WORD("H8",  A_H8),
+  WORD("H9",  A_H9),
+  WORD("H10", A_H10),
+  WORD("H11", A_H11)
 };
 
-const Word AM = {"AM", new uint8_t[2]{107, 106}, 2};
-const Word PM = {"PM", new uint8_t[2]{102, 101}, 2};
+const uint8_t A_AM[] = {107, 106};
+const Word AM = WORD("AM", A_AM);
+
+const uint8_t A_PM[] = {102, 101};
+const Word PM = WORD("PM", A_PM);
 
 const Digit SCHEDULE = { "S", 110 }; // pseudo-digit
 const Digit DIGITS[] = {
@@ -175,7 +204,8 @@ const int IR_POWER    = 0xFA002FD0;//0xFFA25D;
 CRGB leds[LED_PIXELS];
 uint8_t ledMode = LED_MODE_NORMAL;
 uint8_t hue = 0; // FastLED's HSV range is from [0...255], instead of common [0...359]
-uint8_t ledBrightness = 20; // in %, to avoid division will be multiplied by 0.01 before application, used for value of HSV color
+uint8_t oldBrightness = 20; // in %, to avoid division will be multiplied by 0.01 before application, used for value of HSV color
+uint8_t newBrightness = 20;
 
 // INITIALIZATIONS
 DS3231 rtc(SDA, SCL); // Analog 4, Analog 5 for Arduino Nano, lib only uses 24h format, no alarms
@@ -201,12 +231,12 @@ bool showMinutes(int mins)
 */
 void increaseBrightness(int stepSize)
 {
-  if (ledBrightness + stepSize > 80)
-    ledBrightness = 80;
-  else if (ledBrightness + stepSize < 0)
-    ledBrightness = 0;
+  if (newBrightness + stepSize > 200)
+    newBrightness = 200;
+  else if (newBrightness + stepSize < 0)
+    newBrightness = 0;
   else
-    ledBrightness += stepSize;
+    newBrightness += stepSize;
 }
 
 /**
@@ -229,7 +259,7 @@ void increaseHue(int stepSize)
 void rainbow()
 {
   // FastLED's built-in rainbow generator
-  fill_rainbow( leds, LED_PIXELS, hue, 7);
+  fill_rainbow(leds, LED_PIXELS, hue, 7);
 }
 
 /**
@@ -548,6 +578,11 @@ void handleLeds()
   if (isScheduleActive)
     setColorForDigit(SCHEDULE);
 
+  if (newBrightness != oldBrightness) {
+    oldBrightness = newBrightness;
+    FastLED.setBrightness(newBrightness);  
+  }
+
   // send the 'leds' array out to the actual LED strip
   FastLED.show();
   // insert a delay to keep the framerate modest
@@ -578,7 +613,7 @@ void setup()
 
   // LED
   FastLED.addLeds<LED_TYPE, LED_DATA_PIN, LED_COLOR_ORDER>(leds, LED_PIXELS).setCorrection(TypicalLEDStrip);
-  FastLED.setBrightness(LED_BRIGHTNESS);
+  FastLED.setBrightness(newBrightness);
   DBG_PRINTLN("LED...");
 
   // IR
