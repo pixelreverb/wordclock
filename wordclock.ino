@@ -50,9 +50,11 @@ FASTLED_USING_NAMESPACE
 
 #define LED_DATA_PIN 2
 #define LED_PIXELS 121
+#define LED_ROWS 11 // needed for matrix-depended effects
+#define LED_COLUMNS 11 // needed for matrix-depended effects
 #define LED_TYPE WS2812B
 #define LED_COLOR_ORDER GRB
-#define FRAMES_PER_SECOND 60
+//#define FRAMES_PER_SECOND 60
 
 #define LED_MODE_NORMAL 0
 #define LED_MODE_RAINBOW 1
@@ -61,6 +63,7 @@ FASTLED_USING_NAMESPACE
 #define LED_MODE_SINELON 4
 #define LED_MODE_BPM 5
 #define LED_MODE_JUGGLE 6
+#define LED_MODE_MATRIX 7
 #define LED_BRIGHTNESS 20
 #define LED_BRIGHTNESS_STEP 10
 #define LED_HUE_STEP 10
@@ -80,7 +83,7 @@ FASTLED_USING_NAMESPACE
 struct wording
 {
   const char * text;
-  uint8_t * leds;
+  const uint8_t * leds;
   size_t size;
 };
 typedef struct wording Word;
@@ -174,34 +177,42 @@ const Digit DIGITS[] = {
   {"D9", 120}
 };
 
+const uint8_t A_CHK[] = {64, 68, 84, 92, 82, 72, 58, 52, 34};
+const Word CHK = WORD("CHK", A_CHK);
+
 // ... RTC ...
 bool updateTime = false;
 bool isTimeUpdateRunning = false;
 bool isScheduleActive = false;
 bool isPowerOffInitialized = false;
-Time t;
+struct Time t;
 
 // ... IR ...
 decode_results irResults;
 bool shouldEvaluateIRresults = false;
 bool evaluatingIRresults = false;
 bool pauseAnimations = false;
-int irCtr = 0;
-const int IR_ZERO  = 0xFA002FEC; //0xFF6897;
-const int IR_ONE   = 0xFA002FC8;//0xFF30CF;
-const int IR_TWO   = 0xFA002FE8;//0xFF18E7;
-const int IR_THREE = 0xFA002FD8;//0xFF7A85;
-const int IR_FOUR  = 0xFA002FF8;//0xFF10EF;
-const int IR_FIVE  = 0xFA002FC4;//0xFF38C7;
-const int IR_SIX   = 0xFA002FE4;//0xFF38C7;
-const int IR_VOL_UP   = 0xFA002FFC;//0xFF629D;
-const int IR_VOL_DOWN = 0xFA002FDC;//0xFFA857;
-const int IR_UP       = 0xFA002FCE;//0xFF906F;
-const int IR_DOWN     = 0xFA002FF6;//0xFFE01F;
-const int IR_POWER    = 0xFA002FD0;//0xFFA25D;
+bool autoCycleHue = false;
+byte irCtr = 0;
+const uint32_t IR_ZERO  = 0xFA002FEC; //0xFF6897;
+const uint32_t IR_ONE   = 0xFA002FC8;//0xFF30CF;
+const uint32_t IR_TWO   = 0xFA002FE8;//0xFF18E7;
+const uint32_t IR_THREE = 0xFA002FD8;//0xFF7A85;
+const uint32_t IR_FOUR  = 0xFA002FF8;//0xFF10EF;
+const uint32_t IR_FIVE  = 0xFA002FC4;//0xFF38C7;
+const uint32_t IR_SIX   = 0xFA002FE4;//0xFF38C7;
+const uint32_t IR_SEVEN = 0xFA002FD4;
+const uint32_t IR_VOL_UP   = 0xFA002FFC;//0xFF629D;
+const uint32_t IR_VOL_DOWN = 0xFA002FDC;//0xFFA857;
+const uint32_t IR_UP       = 0xFA002FCE;//0xFF906F;
+const uint32_t IR_DOWN     = 0xFA002FF6;//0xFFE01F;
+const uint32_t IR_POWER    = 0xFA002FD0;//0xFFA25D;
+const uint32_t IR_AUTO_HUE = 0xFA002FD6;
 
 // ... LED ...
 CRGB leds[LED_PIXELS];
+bool blinkToConfirm = false;
+uint8_t fps = 60;
 uint8_t ledMode = LED_MODE_NORMAL;
 uint8_t hue = 0; // FastLED's HSV range is from [0...255], instead of common [0...359]
 uint8_t oldBrightness = 20; // in %, to avoid division will be multiplied by 0.01 before application, used for value of HSV color
@@ -328,6 +339,38 @@ void juggle()
   }
 }
 
+void matrix()
+{
+  fadeToBlackBy( leds, LED_PIXELS, 20);
+
+  // we are using a strip here
+  // and to make even more confusing
+  // the index count alternates, like:
+  //    1  2  3  4
+  //    8  7  6  5
+  //    9 10 11 12 ...
+
+  // copy existing rows to next following rows to have a flow effect
+  for (int i = LED_ROWS - 2; i > 0; i--)
+  {
+    for(int j = 0; j < LED_COLUMNS; j++)
+    {
+      if (i%2 == 0) 
+      {
+        leds[(((i + 1) * LED_COLUMNS) - 1) - (j % LED_COLUMNS)] = leds[(i * LED_COLUMNS) + j];
+      }
+      else 
+      {
+        leds[((i + 1) * LED_COLUMNS) + (j % LED_COLUMNS)] = leds[(i * LED_COLUMNS) - ((j % LED_COLUMNS) + 1)];
+      }
+    }
+  }
+
+  // spawn new pixels in first row
+  int pos = random16(LED_COLUMNS);
+  leds[pos] = CHSV( hue, 255, 192);
+}
+
 /**
    Color pixels for given word.
 */
@@ -338,6 +381,19 @@ void setColorForWord(Word _word)
     int ledNo = _word.leds[i];
     if (ledNo < LED_PIXELS)
       leds[ledNo].setHue(hue);
+  }
+}
+
+/**
+   Color pixels for given word.
+*/
+void setColorForWord(Word _word, const struct CRGB &color)
+{
+  for (int i = 0; i < _word.size; i++) 
+  {
+    int ledNo = _word.leds[i];
+    if (ledNo < LED_PIXELS)
+      leds[ledNo] = color;
   }
 }
 
@@ -381,6 +437,16 @@ ISR(TIMER1_COMPA_vect)
   irCtr++;
 }
 
+/*
+   Check if schedule should be applied.
+*/
+bool shouldGoToSleep() 
+{
+  if (!isScheduleActive) return false;
+  t = rtc.getTime();
+  return ((RTC_ALIVE_FROM > t.hour) || (t.hour >= RTC_ALIVE_TO));
+}
+
 /**
    Main function to determine which words to highlight to show time.
 */
@@ -398,37 +464,35 @@ void handleDisplayTime()
   // reset color array to black
   fill_solid(leds, LED_PIXELS, CRGB::Black);
 
-  int mins = t.min;
-
   // set start of sentence
   setColorForWord(IT);
   setColorForWord(IS);
 
   // set 5-minute-step
-  if (showMinutes(mins)) 
+  if (showMinutes(t.min)) 
   {
     // WARNING: will only be valid for mins in range of [0...55],
     //          will cause an out-of-bounds exception for mins > 55
-    int idx = (mins > 30) 
-                ? int((MIN_PARTS - 1) - ((mins - 30) / MIN_STEP)) 
-                : int(mins / MIN_STEP);
+    int idx = (t.min > 30) 
+                ? int((MIN_PARTS - 1) - int((abs(t.min - 1) - 30) / MIN_STEP)) 
+                : int(t.min / MIN_STEP);
     setColorForWord(W_MINS[ idx ]);
   }
 
   // set relation
-  if (showMinutes(mins)) 
+  if (showMinutes(t.min)) 
   {
-    if (mins > 30)
+    if (t.min > 30)
       setColorForWord(TO); // to
     else
       setColorForWord(PAST); // past
   }
 
   // set hour
-  if (mins > 30)
-    setColorForWord(W_HOURS[int(ceil(t.hour % 12)) + 1]);// to
+  if (t.min > 30)
+    setColorForWord(W_HOURS[(int)ceil(t.hour % 12) + 1]); // to
   else
-    setColorForWord(W_HOURS[int(ceil(t.hour % 12))]);// past
+    setColorForWord(W_HOURS[(int)ceil(t.hour % 12)]); // past
 
   // set daytime
   if (t.hour > 12)
@@ -437,8 +501,8 @@ void handleDisplayTime()
     setColorForWord(AM);
 
   // set digits for minute and second
-  int m1 = int(mins / 10);  // only "first digit" of minute value, e.g. 34 => 3
-  int m2 = int(mins - (m1 * 10)); // only "second digit" of minute value, e.g. 34 => 4
+  int m1 = int(t.min / 10);  // only "first digit" of minute value, e.g. 34 => 3
+  int m2 = int(t.min - (m1 * 10)); // only "second digit" of minute value, e.g. 34 => 4
 
   if (m1 == m2) 
   {
@@ -482,35 +546,47 @@ void handleIRresults()
 
   DBG_PRINTLN(irResults.value, HEX);
 
-  switch (int(irResults.value)) 
+  switch (irResults.value) 
   {
     case IR_ZERO:
       DBG_PRINTLN(">>NORMAL");
       ledMode = LED_MODE_NORMAL;
+      fps = 25;
       break;
     case IR_ONE:
       DBG_PRINTLN(">>RAINBOW");
       ledMode = LED_MODE_RAINBOW;
+      fps = 60;
       break;
     case IR_TWO:
       DBG_PRINTLN(">>RAINBOW GLITTER");
       ledMode = LED_MODE_RAINBOW_GLITTER;
+      fps = 60;
       break;
     case IR_THREE:
       DBG_PRINTLN(">>CONFETTI");
       ledMode = LED_MODE_CONFETTI;
+      fps = 60;
       break;
     case IR_FOUR:
       DBG_PRINTLN(">>SINELON");
       ledMode = LED_MODE_SINELON;
+      fps = 60;
       break;
     case IR_FIVE:
       DBG_PRINTLN(">>BPM");
       ledMode = LED_MODE_BPM;
+      fps = 60;
       break;
     case IR_SIX:
       DBG_PRINTLN(">>JUGGLE");
       ledMode = LED_MODE_JUGGLE;
+      fps = 60;
+      break;
+    case IR_SEVEN:
+      DBG_PRINTLN(">>MATRIX");
+      ledMode = LED_MODE_MATRIX;
+      fps = 25;
       break;
     case IR_VOL_UP:
       DBG_PRINTLN("BRIGHTNESS++");
@@ -531,6 +607,12 @@ void handleIRresults()
     case IR_POWER:
       DBG_PRINTLN(">>SCHEDULE");
       isScheduleActive = !isScheduleActive;
+      blinkToConfirm = true;
+      break;
+    case IR_AUTO_HUE:
+      DBG_PRINTLN(">>AUTO HUE");
+      autoCycleHue = !autoCycleHue;
+      blinkToConfirm = true;
       break;
   }
 
@@ -573,10 +655,20 @@ void handleLeds()
     case LED_MODE_JUGGLE:
       juggle();
       break;
+
+    case LED_MODE_MATRIX:
+      matrix();
+      break;
   }
 
   if (isScheduleActive)
     setColorForDigit(SCHEDULE);
+
+  if (blinkToConfirm)
+  {
+    blinkToConfirm = false;
+    setColorForWord(CHK, CRGB::White);
+  }
 
   if (newBrightness != oldBrightness) {
     oldBrightness = newBrightness;
@@ -586,13 +678,14 @@ void handleLeds()
   // send the 'leds' array out to the actual LED strip
   FastLED.show();
   // insert a delay to keep the framerate modest
-  FastLED.delay(1000 / FRAMES_PER_SECOND);
+  FastLED.delay(1000 / fps);
 
   // cycle through hue for some animations
   if ((ledMode == LED_MODE_RAINBOW) 
       || (ledMode == LED_MODE_RAINBOW_GLITTER)
       || (ledMode == LED_MODE_SINELON)
-      || (ledMode == LED_MODE_JUGGLE))
+      || (ledMode == LED_MODE_JUGGLE)
+      || autoCycleHue)
     if( millis() % 20 == 0 ) { hue++; }
 }
 
@@ -633,15 +726,8 @@ void loop()
 
   if (!pauseAnimations) 
   {
-    t = rtc.getTime();
-
     // simple schedule
-    if ((t.hour >= RTC_ALIVE_FROM) && (t.hour < RTC_ALIVE_TO)) 
-    { // leds are active 
-      isPowerOffInitialized = false;
-      handleLeds();
-    } 
-    else 
+    if (shouldGoToSleep())
     { // leds should not be active
       if (!isPowerOffInitialized) {
         fill_solid(leds, LED_PIXELS, CRGB::Black);
@@ -649,7 +735,11 @@ void loop()
         FastLED.show();
       }
     }
-
+    else
+    { // leds are active 
+      isPowerOffInitialized = false;
+      handleLeds();
+    } 
   } 
   else if (irCtr >= IR_PAUSE) 
   {
