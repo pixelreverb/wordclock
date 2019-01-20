@@ -474,8 +474,8 @@ void handleDisplayTime()
     // WARNING: will only be valid for mins in range of [0...55],
     //          will cause an out-of-bounds exception for mins > 55
     int idx = (t.min > 30) 
-                ? int((MIN_PARTS - 1) - int((abs(t.min - 1) - 30) / MIN_STEP)) 
-                : int(t.min / MIN_STEP);
+                ? floor((MIN_PARTS - 1) - ((t.min - 30) / MIN_STEP))
+                : floor(t.min / MIN_STEP);
     setColorForWord(W_MINS[ idx ]);
   }
 
