@@ -242,6 +242,7 @@ volatile byte irCtr = 0;
 bool evaluatingIRresults = false;
 bool pauseAnimations = false;
 bool autoCycleHue = false;
+bool autoCycleBrightness = false;
 
 /*
   All remote control values we want to check are
@@ -263,6 +264,7 @@ const uint16_t IR_UP       = 0x2FCE;
 const uint16_t IR_DOWN     = 0x2FF6;
 const uint16_t IR_POWER    = 0x2FD0;
 const uint16_t IR_AUTO_HUE = 0x2FD6;
+const uint16_t IR_AUTO_BRIGHTNESS = 0x2FEA;
 
 // ===================================
 // ... LED ...
@@ -275,6 +277,7 @@ uint8_t ledMode = LED_MODE_NORMAL;
 uint8_t hue = 0;                      // FastLED's HSV range is from [0...255], instead of common [0...359]
 uint8_t oldBrightness = 20;           // in %, to avoid division will be multiplied by 0.01 before application, used for value of HSV color
 uint8_t newBrightness = 20;
+bool incBrightness = true;
 
 // ===================================
 // INITIALIZATIONS
@@ -604,7 +607,6 @@ void handleDisplayTime()
 
   // get time values
   RTC.read(t);
-  DBG_PRINTLN(rtc.getTimeStr());
 
   // reset color array to black
   fill_solid(leds, LED_PIXELS, CRGB::Black);
@@ -635,7 +637,7 @@ void handleDisplayTime()
 
   // set hour
   if (t.Minute > 30)
-    setColorForWord(W_HOURS[(int)ceil(t.Hour % 12) + 1]); // to
+    setColorForWord(W_HOURS[(int)ceil((t.Hour + 1) % 12)]); // to
   else
     setColorForWord(W_HOURS[(int)ceil(t.Hour % 12)]); // past
 
@@ -729,6 +731,11 @@ void evaluateIRResult(uint32_t result)
       autoCycleHue = !autoCycleHue;
       blinkToConfirm = true;
       break;
+    case IR_AUTO_BRIGHTNESS:
+      DBG_PRINTLN(">>AUTO HUE");
+      autoCycleBrightness = !autoCycleBrightness;
+      blinkToConfirm = true;
+      break;
   }
 }
 
@@ -760,6 +767,31 @@ void handleLeds()
   {
     blinkToConfirm = false;
     setColorForWord(CHK, CRGB::White);
+  }
+
+  if (autoCycleBrightness) 
+  {
+    if (millis() % 20 == 0) 
+    {
+      if (incBrightness) 
+      {
+        newBrightness++;
+        if (newBrightness > 180) 
+        {
+          newBrightness = 180;
+          incBrightness = false;
+        }
+      } 
+      else
+      {
+        newBrightness--;
+        if (newBrightness < 2) // FastLED treats brightness of 0 as if it is 255
+        {
+          newBrightness = 2;
+          incBrightness = true;
+        }
+      }
+    }
   }
 
   if (newBrightness != oldBrightness) {
